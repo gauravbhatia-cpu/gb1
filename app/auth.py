@@ -1,6 +1,7 @@
 """Small Supabase Auth bridge for FastAPI dependencies."""
 
 from dataclasses import dataclass
+import os
 
 import requests
 from fastapi import Depends, HTTPException, Request
@@ -14,10 +15,26 @@ class AuthUser:
     email: str | None = None
 
 
+def _supabase_credentials() -> tuple[str, str]:
+    url = (
+        os.getenv("SUPABASE_URL") or os.getenv("NEXT_PUBLIC_SUPABASE_URL") or
+        settings.supabase_url or ""
+    )
+    key = (
+        os.getenv("SUPABASE_PUBLISHABLE_KEY") or
+        os.getenv("NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY") or
+        os.getenv("SUPABASE_ANON_KEY") or
+        os.getenv("NEXT_PUBLIC_SUPABASE_ANON_KEY") or
+        settings.supabase_publishable_key or settings.supabase_anon_key or ""
+    )
+    return url, key
+
+
 def public_auth_config() -> dict:
+    url, key = _supabase_credentials()
     return {
-        "supabaseUrl": settings.supabase_url or "",
-        "supabaseKey": settings.supabase_publishable_key or settings.supabase_anon_key or "",
+        "supabaseUrl": url,
+        "supabaseKey": key,
     }
 
 
@@ -26,8 +43,7 @@ def optional_current_user(request: Request) -> AuthUser | None:
     if not authorization.lower().startswith("bearer "):
         return None
     token = authorization.split(" ", 1)[1].strip()
-    url = settings.supabase_url
-    key = settings.supabase_publishable_key or settings.supabase_anon_key
+    url, key = _supabase_credentials()
     if not url or not key:
         raise HTTPException(503, "Authentication is not configured")
     try:
