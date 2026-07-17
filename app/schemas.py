@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Optional, List, Any
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class CompetitorCreate(BaseModel):
@@ -16,6 +16,27 @@ class CompetitorCreate(BaseModel):
 
 class CompetitorOut(CompetitorCreate):
     id: int
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class WorkspaceCreate(BaseModel):
+    brand_name: str
+    website: Optional[str] = None
+    handle_instagram: Optional[str] = None
+    handle_twitter: Optional[str] = None
+    competitor_names: List[str] = Field(default_factory=list)
+
+
+class WorkspaceOut(BaseModel):
+    id: str
+    brand_name: str
+    website: Optional[str]
+    handle_instagram: Optional[str]
+    handle_twitter: Optional[str]
+    is_sample_data: bool
     created_at: datetime
 
     class Config:

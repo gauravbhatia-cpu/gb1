@@ -5,12 +5,12 @@ analysis, posting-time patterns, engagement, competitor ad monitoring, and
 brand search interest — built to run today, with real (not mocked)
 connectors to the APIs that are actually available for this in 2026.
 
-**This has been tested and runs end-to-end.** The FastAPI app automatically
-creates a realistic sample workspace when the database is empty and serves a
-responsive browser dashboard at `/`. Plug in real API keys when you're ready
-to track real competitors.
+**This has been tested and runs end-to-end.** Supabase provides authentication
+and persistent Postgres storage. Each account gets an isolated workspace and
+Scout stores only real records returned by configured connectors or imports;
+it does not fabricate market metrics.
 
-## Quick start (demo mode, no API keys needed)
+## Quick start
 
 ```bash
 python -m venv venv && source venv/bin/activate   # optional but recommended
@@ -32,10 +32,8 @@ Vercel auto-detects the FastAPI backend at `app/main.py`. The deployed root page
 is the Scout product dashboard; `/docs` exposes the interactive API reference
 and `/health` provides a lightweight availability check.
 
-The default SQLite database is automatically placed in Vercel's writable
-`/tmp` directory so demo/API requests do not crash. That storage is ephemeral:
-set `DATABASE_URL` in Vercel to a managed Postgres connection string before
-using the deployment for persistent data.
+The hosted project uses the Supabase integration's `POSTGRES_URL`,
+`SUPABASE_URL`, and publishable key. SQLite remains a local-only fallback.
 
 ## Going live: what's real vs. what needs a decision
 

@@ -18,20 +18,31 @@ def _change(current: float, previous: float) -> float:
     return round((current - previous) / previous * 100, 1)
 
 
-def build_dashboard_payload(db: Session, days: int = 30, competitor_id: int | None = None) -> dict:
+def build_dashboard_payload(
+    db: Session,
+    workspace: models.Workspace,
+    days: int = 30,
+    competitor_id: int | None = None,
+) -> dict:
     days = max(7, min(days, 90))
     now = datetime.utcnow()
     cutoff = now - timedelta(days=days)
     previous_cutoff = cutoff - timedelta(days=days)
 
-    competitors = db.query(models.Competitor).order_by(models.Competitor.id).all()
+    competitors = (
+        db.query(models.Competitor)
+        .filter_by(workspace_id=workspace.id)
+        .order_by(models.Competitor.id)
+        .all()
+    )
     selected = [c for c in competitors if competitor_id is None or c.id == competitor_id]
     selected_ids = [c.id for c in selected]
 
-    database_posts = db.query(models.Post).all()
-    database_mentions = db.query(models.Mention).all()
-    database_ads = db.query(models.AdCreative).all()
-    database_snapshots = db.query(models.BrandSearchSnapshot).all()
+    workspace_ids = [c.id for c in competitors]
+    database_posts = db.query(models.Post).filter(models.Post.competitor_id.in_(workspace_ids)).all() if workspace_ids else []
+    database_mentions = db.query(models.Mention).filter(models.Mention.competitor_id.in_(workspace_ids)).all() if workspace_ids else []
+    database_ads = db.query(models.AdCreative).filter(models.AdCreative.competitor_id.in_(workspace_ids)).all() if workspace_ids else []
+    database_snapshots = db.query(models.BrandSearchSnapshot).filter(models.BrandSearchSnapshot.competitor_id.in_(workspace_ids)).all() if workspace_ids else []
     all_posts = [p for p in database_posts if p.competitor_id in selected_ids]
     all_mentions = [m for m in database_mentions if m.competitor_id in selected_ids]
     all_ads = [a for a in database_ads if a.competitor_id in selected_ids]
@@ -125,7 +136,12 @@ def build_dashboard_payload(db: Session, days: int = 30, competitor_id: int | No
 
     return {
         "generated_at": now.isoformat(),
-        "is_demo": all((c.notes or "").startswith("Demo brand") for c in competitors) if competitors else False,
+        "is_demo": workspace.id == "demo",
+        "workspace": {
+            "id": workspace.id,
+            "brand_name": workspace.brand_name,
+            "is_sample_data": workspace.is_sample_data,
+        },
         "days": days,
         "selected_competitor": competitor_id,
         "summary": {

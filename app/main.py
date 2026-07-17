@@ -3,6 +3,8 @@ FastAPI app -- the backend the Streamlit dashboard (and anything else)
 talks to. Run with:  uvicorn app.main:app --reload
 """
 import logging
+import json
+import uuid
 from datetime import datetime
 from typing import List
 
@@ -18,6 +20,7 @@ from app.analysis import content_classifier, posting_time, engagement, ad_organi
 from app.dashboard_data import build_dashboard_payload
 from app.dashboard_ui import DASHBOARD_HTML
 from app.demo_data import ensure_demo_data
+from app.auth import AuthUser, optional_current_user, public_auth_config, require_current_user
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -31,7 +34,7 @@ def on_startup():
     db = SessionLocal()
     try:
         if ensure_demo_data(db):
-            logger.info("Created hosted demo dataset")
+            logger.info("Prepared the public preview workspace")
     finally:
         db.close()
 
@@ -47,7 +50,7 @@ def _parse_dt(value):
 
 @app.get("/", response_class=HTMLResponse, include_in_schema=False)
 def home():
-    return DASHBOARD_HTML
+    return DASHBOARD_HTML.replace("__SCOUT_CONFIG__", json.dumps(public_auth_config()))
 
 
 @app.get("/health", tags=["system"])
@@ -55,15 +58,77 @@ def health():
     return {"status": "ok", "service": "competitor-social-intel"}
 
 
+def _workspace_for_user(user: AuthUser, db: Session) -> models.Workspace | None:
+    return db.query(models.Workspace).filter_by(owner_id=user.id).first()
+
+
+def require_workspace(
+    user: AuthUser = Depends(require_current_user),
+    db: Session = Depends(get_db),
+) -> models.Workspace:
+    workspace = _workspace_for_user(user, db)
+    if not workspace:
+        raise HTTPException(404, "Create your brand workspace first")
+    return workspace
+
+
+@app.get("/api/me", tags=["workspace"])
+def current_account(
+    user: AuthUser = Depends(require_current_user),
+    db: Session = Depends(get_db),
+):
+    workspace = _workspace_for_user(user, db)
+    return {
+        "user": {"id": user.id, "email": user.email},
+        "workspace": schemas.WorkspaceOut.model_validate(workspace).model_dump(mode="json") if workspace else None,
+    }
+
+
+@app.post("/api/workspace", response_model=schemas.WorkspaceOut, tags=["workspace"])
+def create_workspace(
+    payload: schemas.WorkspaceCreate,
+    user: AuthUser = Depends(require_current_user),
+    db: Session = Depends(get_db),
+):
+    if _workspace_for_user(user, db):
+        raise HTTPException(409, "This account already has a workspace")
+    brand_name = payload.brand_name.strip()
+    if not brand_name:
+        raise HTTPException(400, "Brand name is required")
+    workspace = models.Workspace(
+        id=str(uuid.uuid4()), owner_id=user.id, brand_name=brand_name,
+        website=payload.website, handle_instagram=payload.handle_instagram,
+        handle_twitter=payload.handle_twitter, is_sample_data=False,
+    )
+    db.add(workspace)
+    db.flush()
+    names = [brand_name] + [name.strip() for name in payload.competitor_names if name.strip()]
+    for index, name in enumerate(dict.fromkeys(names)):
+        db.add(models.Competitor(
+            workspace_id=workspace.id, name=name,
+            website=payload.website if index == 0 else None,
+            handle_instagram=payload.handle_instagram if index == 0 else None,
+            handle_twitter=payload.handle_twitter if index == 0 else None,
+            notes="Your brand" if index == 0 else None,
+        ))
+    db.commit()
+    db.refresh(workspace)
+    return workspace
+
+
 @app.get("/api/dashboard", tags=["dashboard"])
 def dashboard_payload(
     days: int = 30,
     competitor_id: int | None = None,
     db: Session = Depends(get_db),
+    user: AuthUser | None = Depends(optional_current_user),
 ):
+    workspace = _workspace_for_user(user, db) if user else db.query(models.Workspace).filter_by(id="demo").first()
+    if not workspace:
+        raise HTTPException(404, "Workspace not found")
     if competitor_id is not None:
-        _get_competitor_or_404(competitor_id, db)
-    return build_dashboard_payload(db, days=days, competitor_id=competitor_id)
+        _get_competitor_or_404(competitor_id, db, workspace.id)
+    return build_dashboard_payload(db, workspace=workspace, days=days, competitor_id=competitor_id)
 
 
 # --------------------------------------------------------------------------- #
@@ -71,11 +136,11 @@ def dashboard_payload(
 # --------------------------------------------------------------------------- #
 
 @app.post("/competitors", response_model=schemas.CompetitorOut)
-def create_competitor(payload: schemas.CompetitorCreate, db: Session = Depends(get_db)):
-    existing = db.query(models.Competitor).filter_by(name=payload.name).first()
+def create_competitor(payload: schemas.CompetitorCreate, db: Session = Depends(get_db), workspace: models.Workspace = Depends(require_workspace)):
+    existing = db.query(models.Competitor).filter_by(workspace_id=workspace.id, name=payload.name).first()
     if existing:
         raise HTTPException(400, f"Competitor '{payload.name}' already exists (id={existing.id}).")
-    comp = models.Competitor(**payload.model_dump())
+    comp = models.Competitor(workspace_id=workspace.id, **payload.model_dump())
     db.add(comp)
     db.commit()
     db.refresh(comp)
@@ -83,12 +148,12 @@ def create_competitor(payload: schemas.CompetitorCreate, db: Session = Depends(g
 
 
 @app.get("/competitors", response_model=List[schemas.CompetitorOut])
-def list_competitors(db: Session = Depends(get_db)):
-    return db.query(models.Competitor).all()
+def list_competitors(db: Session = Depends(get_db), workspace: models.Workspace = Depends(require_workspace)):
+    return db.query(models.Competitor).filter_by(workspace_id=workspace.id).all()
 
 
-def _get_competitor_or_404(competitor_id: int, db: Session) -> models.Competitor:
-    comp = db.query(models.Competitor).get(competitor_id)
+def _get_competitor_or_404(competitor_id: int, db: Session, workspace_id: str) -> models.Competitor:
+    comp = db.query(models.Competitor).filter_by(id=competitor_id, workspace_id=workspace_id).first()
     if not comp:
         raise HTTPException(404, "Competitor not found")
     return comp
@@ -99,8 +164,8 @@ def _get_competitor_or_404(competitor_id: int, db: Session) -> models.Competitor
 # --------------------------------------------------------------------------- #
 
 @app.post("/competitors/{competitor_id}/sync/twitter")
-def sync_twitter(competitor_id: int, db: Session = Depends(get_db)):
-    comp = _get_competitor_or_404(competitor_id, db)
+def sync_twitter(competitor_id: int, db: Session = Depends(get_db), workspace: models.Workspace = Depends(require_workspace)):
+    comp = _get_competitor_or_404(competitor_id, db, workspace.id)
     if not comp.handle_twitter:
         raise HTTPException(400, "Competitor has no handle_twitter set.")
 
@@ -132,12 +197,12 @@ def sync_twitter(competitor_id: int, db: Session = Depends(get_db)):
 
 
 @app.post("/competitors/{competitor_id}/sync/mentions")
-def sync_mentions(competitor_id: int, query: str, db: Session = Depends(get_db)):
+def sync_mentions(competitor_id: int, query: str, db: Session = Depends(get_db), workspace: models.Workspace = Depends(require_workspace)):
     """
     query: search string, e.g. '"Acme Shoes" OR @acmeshoes'.
     Pulls from both X (last 7 days) and news/web sources.
     """
-    comp = _get_competitor_or_404(competitor_id, db)
+    comp = _get_competitor_or_404(competitor_id, db, workspace.id)
 
     twitter_mentions = twitter_connector.search_recent_mentions(query)
     news_mentions = news_connector.search_mentions(query)
@@ -169,8 +234,8 @@ def sync_mentions(competitor_id: int, query: str, db: Session = Depends(get_db))
 
 
 @app.post("/competitors/{competitor_id}/sync/meta-ads")
-def sync_meta_ads(competitor_id: int, search_term: str, db: Session = Depends(get_db)):
-    comp = _get_competitor_or_404(competitor_id, db)
+def sync_meta_ads(competitor_id: int, search_term: str, db: Session = Depends(get_db), workspace: models.Workspace = Depends(require_workspace)):
+    comp = _get_competitor_or_404(competitor_id, db, workspace.id)
     raw_ads = meta_ads_connector.get_active_ads(search_term)
 
     saved = 0
@@ -197,9 +262,9 @@ def sync_meta_ads(competitor_id: int, search_term: str, db: Session = Depends(ge
 
 
 @app.post("/competitors/{competitor_id}/import/oembed")
-def import_oembed_post(competitor_id: int, payload: schemas.OEmbedImportRequest, db: Session = Depends(get_db)):
+def import_oembed_post(competitor_id: int, payload: schemas.OEmbedImportRequest, db: Session = Depends(get_db), workspace: models.Workspace = Depends(require_workspace)):
     """Compliant manual-import path for a single public IG/FB post URL."""
-    comp = _get_competitor_or_404(competitor_id, db)
+    comp = _get_competitor_or_404(competitor_id, db, workspace.id)
 
     if payload.platform == "facebook":
         data = oembed_connector.fetch_facebook_post(payload.post_url)
@@ -227,14 +292,14 @@ def import_oembed_post(competitor_id: int, payload: schemas.OEmbedImportRequest,
 
 
 @app.post("/competitors/{competitor_id}/analyze/match-ads")
-def match_posts_to_ads(competitor_id: int, db: Session = Depends(get_db)):
+def match_posts_to_ads(competitor_id: int, db: Session = Depends(get_db), workspace: models.Workspace = Depends(require_workspace)):
     """
     Run best-effort content matching between this competitor's organic posts
     and their tracked ad creatives, flagging each post as boosted or
     organic-only. Re-run this after every sync to keep flags current --
     it's cheap (no external API calls, pure text comparison).
     """
-    comp = _get_competitor_or_404(competitor_id, db)
+    comp = _get_competitor_or_404(competitor_id, db, workspace.id)
     posts = db.query(models.Post).filter_by(competitor_id=comp.id).all()
     ads = db.query(models.AdCreative).filter_by(competitor_id=comp.id).all()
 
@@ -247,9 +312,9 @@ def match_posts_to_ads(competitor_id: int, db: Session = Depends(get_db)):
 
 
 @app.get("/competitors/{competitor_id}/posts/organic-only", response_model=List[schemas.PostOut])
-def get_organic_only_posts(competitor_id: int, db: Session = Depends(get_db)):
+def get_organic_only_posts(competitor_id: int, db: Session = Depends(get_db), workspace: models.Workspace = Depends(require_workspace)):
     """Posts with no ad spend detected behind them (or not yet matched)."""
-    _get_competitor_or_404(competitor_id, db)
+    _get_competitor_or_404(competitor_id, db, workspace.id)
     return (
         db.query(models.Post)
         .filter_by(competitor_id=competitor_id)
@@ -260,9 +325,9 @@ def get_organic_only_posts(competitor_id: int, db: Session = Depends(get_db)):
 
 
 @app.get("/competitors/{competitor_id}/posts/boosted", response_model=List[schemas.PostOut])
-def get_boosted_posts(competitor_id: int, db: Session = Depends(get_db)):
+def get_boosted_posts(competitor_id: int, db: Session = Depends(get_db), workspace: models.Workspace = Depends(require_workspace)):
     """Organic posts that are also running as paid ads right now."""
-    _get_competitor_or_404(competitor_id, db)
+    _get_competitor_or_404(competitor_id, db, workspace.id)
     return (
         db.query(models.Post)
         .filter_by(competitor_id=competitor_id, is_boosted=True)
@@ -276,34 +341,34 @@ def get_boosted_posts(competitor_id: int, db: Session = Depends(get_db)):
 # --------------------------------------------------------------------------- #
 
 @app.get("/competitors/{competitor_id}/posts", response_model=List[schemas.PostOut])
-def get_posts(competitor_id: int, db: Session = Depends(get_db)):
-    _get_competitor_or_404(competitor_id, db)
+def get_posts(competitor_id: int, db: Session = Depends(get_db), workspace: models.Workspace = Depends(require_workspace)):
+    _get_competitor_or_404(competitor_id, db, workspace.id)
     return db.query(models.Post).filter_by(competitor_id=competitor_id).order_by(models.Post.posted_at.desc()).all()
 
 
 @app.get("/competitors/{competitor_id}/mentions", response_model=List[schemas.MentionOut])
-def get_mentions(competitor_id: int, db: Session = Depends(get_db)):
-    _get_competitor_or_404(competitor_id, db)
+def get_mentions(competitor_id: int, db: Session = Depends(get_db), workspace: models.Workspace = Depends(require_workspace)):
+    _get_competitor_or_404(competitor_id, db, workspace.id)
     return db.query(models.Mention).filter_by(competitor_id=competitor_id).order_by(models.Mention.published_at.desc()).all()
 
 
 @app.get("/competitors/{competitor_id}/ads", response_model=List[schemas.AdCreativeOut])
-def get_ads(competitor_id: int, db: Session = Depends(get_db)):
-    _get_competitor_or_404(competitor_id, db)
+def get_ads(competitor_id: int, db: Session = Depends(get_db), workspace: models.Workspace = Depends(require_workspace)):
+    _get_competitor_or_404(competitor_id, db, workspace.id)
     return db.query(models.AdCreative).filter_by(competitor_id=competitor_id).all()
 
 
 @app.get("/competitors/{competitor_id}/analysis/posting-time")
-def analysis_posting_time(competitor_id: int, db: Session = Depends(get_db)):
-    _get_competitor_or_404(competitor_id, db)
+def analysis_posting_time(competitor_id: int, db: Session = Depends(get_db), workspace: models.Workspace = Depends(require_workspace)):
+    _get_competitor_or_404(competitor_id, db, workspace.id)
     posts = db.query(models.Post).filter_by(competitor_id=competitor_id).all()
     post_dicts = [{"posted_at": p.posted_at, "likes": p.likes, "comments": p.comments, "shares": p.shares} for p in posts]
     return posting_time.build_posting_heatmap(post_dicts)
 
 
 @app.get("/competitors/{competitor_id}/analysis/summary")
-def analysis_summary(competitor_id: int, db: Session = Depends(get_db)):
-    _get_competitor_or_404(competitor_id, db)
+def analysis_summary(competitor_id: int, db: Session = Depends(get_db), workspace: models.Workspace = Depends(require_workspace)):
+    _get_competitor_or_404(competitor_id, db, workspace.id)
     posts = db.query(models.Post).filter_by(competitor_id=competitor_id).all()
     post_dicts = [{
         "posted_at": p.posted_at, "likes": p.likes, "comments": p.comments,

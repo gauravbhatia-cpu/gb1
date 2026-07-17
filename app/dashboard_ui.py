@@ -147,6 +147,7 @@ DASHBOARD_HTML = r"""
     .close-button { border:0;background:transparent;color:var(--muted);font-size:22px; }.modal-body { padding:22px 24px;display:grid;gap:14px; }
     .field { display:grid;gap:6px; }.field label { color:#a9bdcb;font-size:11px;font-weight:700; }.field input { border:1px solid var(--line);background:#0c1721;color:var(--text);border-radius:11px;padding:11px;outline:none; }
     .field input:focus { border-color:var(--green); }.modal-actions { display:flex;justify-content:flex-end;gap:9px;margin-top:4px; }
+    .field-help,.auth-note { color:var(--muted);font-size:11px;line-height:1.5;margin:0; }.auth-switch { background:transparent;border:0;color:var(--green);padding:0;font-weight:700;cursor:pointer; }
     .toast { position:fixed; right:24px; bottom:24px; z-index:50; background:#152533;border:1px solid var(--line);padding:13px 16px;border-radius:12px;box-shadow:var(--shadow);font-size:12px;transform:translateY(25px);opacity:0;pointer-events:none;transition:.25s; }
     .toast.show { transform:none;opacity:1; }
     @media(max-width:1050px){ .kpi-grid{grid-template-columns:repeat(2,1fr)} .grid-2{grid-template-columns:1fr} .competitor-row{grid-template-columns:minmax(180px,1.4fr) repeat(3,1fr)} .competitor-row > :nth-child(5),.competitor-row > :nth-child(6){display:none} }
@@ -164,7 +165,7 @@ DASHBOARD_HTML = r"""
         <button class="nav-button" data-view="mentions-view"><span class="nav-icon">◎</span>Mentions</button>
         <button class="nav-button" data-view="ads-view"><span class="nav-icon">◈</span>Ads</button>
       </nav>
-      <div class="sidebar-foot"><strong><span class="demo-dot"></span>Demo workspace</strong><p>Sample data refreshes automatically on a new server instance.</p></div>
+      <div class="sidebar-foot"><strong><span class="demo-dot"></span><span id="workspace-name">Public preview</span></strong><p id="workspace-copy">Sign in to create a private workspace backed by Supabase.</p></div>
     </aside>
     <main>
       <header class="topbar">
@@ -173,12 +174,13 @@ DASHBOARD_HTML = r"""
           <select id="competitor-filter" class="control" aria-label="Filter competitor"><option value="">All competitors</option></select>
           <select id="date-filter" class="control" aria-label="Date range"><option value="7">7 days</option><option value="30" selected>30 days</option><option value="90">90 days</option></select>
           <button id="refresh" class="ghost-button" aria-label="Refresh data">↻</button>
+          <button id="auth-button" class="ghost-button">Sign in</button>
           <button id="add-competitor" class="primary-button">+ Add brand</button>
         </div>
       </header>
       <div class="content">
         <section id="overview" class="view active">
-          <div class="page-heading"><div><div class="eyebrow">Competitive pulse</div><h1>See what is moving.</h1><p class="lede">Content, conversation, and paid momentum across your market.</p></div><div class="live-chip"><span class="demo-dot"></span>Sample data · ready to explore</div></div>
+          <div class="page-heading"><div><div class="eyebrow">Competitive pulse</div><h1>See what is moving.</h1><p class="lede">Content, conversation, and paid momentum across your market.</p></div><div class="live-chip"><span class="demo-dot"></span>Real records only</div></div>
           <div id="kpis" class="kpi-grid"><div class="skeleton"></div><div class="skeleton"></div><div class="skeleton"></div><div class="skeleton"></div></div>
           <div class="grid-2">
             <article class="card panel"><div class="panel-head"><div><div class="panel-title">Engagement velocity</div><div class="panel-subtitle">Daily audience actions across tracked content</div></div><div class="legend"><span style="--dot:var(--green)">Engagement</span></div></div><div id="engagement-chart" class="bar-chart"></div></article>
@@ -201,9 +203,35 @@ DASHBOARD_HTML = r"""
       <div class="modal-body"><div class="field"><label for="brand-name">Brand name *</label><input id="brand-name" name="name" required placeholder="e.g. Northstar Studio"></div><div class="field"><label for="brand-website">Website</label><input id="brand-website" name="website" type="url" placeholder="https://"></div><div class="field"><label for="brand-instagram">Instagram handle</label><input id="brand-instagram" name="handle_instagram" placeholder="northstarstudio"></div><div class="field"><label for="brand-twitter">X / Twitter handle</label><input id="brand-twitter" name="handle_twitter" placeholder="northstarstudio"></div><div class="modal-actions"><button class="ghost-button close-dialog" type="button">Cancel</button><button class="primary-button" type="submit">Add competitor</button></div></div>
     </form>
   </dialog>
+  <dialog id="auth-dialog">
+    <form id="auth-form">
+      <div class="modal-head"><div><div class="eyebrow">Private workspace</div><h2 id="auth-title">Sign in to Scout</h2></div><button class="close-button auth-close" type="button">&times;</button></div>
+      <div class="modal-body">
+        <div class="field"><label for="auth-email">Work email</label><input id="auth-email" type="email" required autocomplete="email" placeholder="you@brand.com"></div>
+        <div class="field"><label for="auth-password">Password</label><input id="auth-password" type="password" minlength="6" required autocomplete="current-password" placeholder="At least 6 characters"></div>
+        <p class="auth-note"><span id="auth-prompt">New to Scout?</span> <button id="auth-switch" class="auth-switch" type="button">Create an account</button></p>
+        <div class="modal-actions"><button class="ghost-button auth-close" type="button">Cancel</button><button id="auth-submit" class="primary-button" type="submit">Sign in</button></div>
+      </div>
+    </form>
+  </dialog>
+  <dialog id="workspace-dialog">
+    <form id="workspace-form">
+      <div class="modal-head"><div><div class="eyebrow">Set up Scout</div><h2>Create your brand workspace</h2></div></div>
+      <div class="modal-body">
+        <p class="auth-note">Your workspace starts with real records only. Metrics appear after data is connected or imported.</p>
+        <div class="field"><label for="workspace-brand">Your brand name *</label><input id="workspace-brand" name="brand_name" required placeholder="e.g. Acme Studios"></div>
+        <div class="field"><label for="workspace-site">Website</label><input id="workspace-site" name="website" type="url" placeholder="https://yourbrand.com"></div>
+        <div class="field"><label for="workspace-instagram">Instagram handle</label><input id="workspace-instagram" name="handle_instagram" placeholder="yourbrand"></div>
+        <div class="field"><label for="workspace-twitter">X / Twitter handle</label><input id="workspace-twitter" name="handle_twitter" placeholder="yourbrand"></div>
+        <div class="field"><label for="workspace-competitors">Competitors</label><input id="workspace-competitors" placeholder="Brand One, Brand Two"><p class="field-help">Separate names with commas.</p></div>
+        <div class="modal-actions"><button class="primary-button" type="submit">Create workspace</button></div>
+      </div>
+    </form>
+  </dialog>
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
   <script>
-    const state = { data: null, query: "", view: "overview" };
+    window.SCOUT_CONFIG = __SCOUT_CONFIG__;
+    const state = { data: null, query: "", view: "overview", session: null, account: null, authMode: "signin" };
     const mixColors = ["#7cdbb5", "#f5ad72", "#a8a5ff", "#68b8ff", "#ff8f9e"];
     const $ = (selector) => document.querySelector(selector);
     const escapeHTML = (value="") => String(value).replace(/[&<>'"]/g, char => ({"&":"&amp;","<":"&lt;",">":"&gt;","'":"&#39;",'"':"&quot;"}[char]));
@@ -212,6 +240,12 @@ DASHBOARD_HTML = r"""
     const relativeTime = (value) => { const days=Math.max(0,Math.round((Date.now()-new Date(value))/86400000)); return days===0?"Today":days===1?"Yesterday":`${days}d ago`; };
     const initials = (name="") => name.split(" ").map(x=>x[0]).join("").slice(0,2).toUpperCase();
     function showToast(message){ const toast=$("#toast"); toast.textContent=message; toast.classList.add("show"); setTimeout(()=>toast.classList.remove("show"),2600); }
+    const authHeaders = () => state.session?.access_token ? {Authorization:`Bearer ${state.session.access_token}`} : {};
+    function saveSession(session){ state.session=session; if(session)localStorage.setItem("scout_session",JSON.stringify(session));else localStorage.removeItem("scout_session"); }
+    async function supabaseAuth(path,body){ const {supabaseUrl,supabaseKey}=window.SCOUT_CONFIG; if(!supabaseUrl||!supabaseKey)throw new Error("Authentication is not configured yet"); const response=await fetch(`${supabaseUrl}/auth/v1/${path}`,{method:"POST",headers:{apikey:supabaseKey,"Content-Type":"application/json"},body:JSON.stringify(body)}); const data=await response.json(); if(!response.ok)throw new Error(data.msg||data.error_description||data.message||"Authentication failed"); return data; }
+    function updateAccountUI(){ const workspace=state.account?.workspace; $("#auth-button").textContent=state.session?"Sign out":"Sign in"; $("#workspace-name").textContent=workspace?.brand_name||"Public preview"; $("#workspace-copy").textContent=workspace?"Private workspace · real stored data":"Sign in to create a private workspace backed by Supabase."; }
+    async function loadAccount(){ if(!state.session)return; const response=await fetch("/api/me",{headers:authHeaders()}); if(response.status===401){saveSession(null);state.account=null;updateAccountUI();return;} if(!response.ok)throw new Error("Could not load your account"); state.account=await response.json(); updateAccountUI(); if(!state.account.workspace)$("#workspace-dialog").showModal(); }
+    function setAuthMode(mode){ state.authMode=mode; const signup=mode==="signup"; $("#auth-title").textContent=signup?"Create your Scout account":"Sign in to Scout"; $("#auth-submit").textContent=signup?"Create account":"Sign in"; $("#auth-prompt").textContent=signup?"Already have an account?":"New to Scout?"; $("#auth-switch").textContent=signup?"Sign in":"Create an account"; }
     function delta(value, suffix=" vs previous period"){ if(typeof value==="string")return `<div class="delta">${escapeHTML(value)}</div>`; const numeric=Number(value||0); const cls=numeric>0?"up":numeric<0?"down":""; const sign=numeric>0?"+":""; return `<div class="delta ${cls}">${sign}${numeric}${suffix}</div>`; }
     function metric(label,value,change,color,suffix="% vs previous period"){ return `<article class="card kpi" style="--kpi-color:${color}"><div class="kpi-label">${label}</div><div class="kpi-value">${value}</div>${delta(change,suffix)}</article>`; }
     function renderKpis(){ const s=state.data.summary; $("#kpis").innerHTML=[metric("Published posts",s.posts,s.posts_change,"var(--green)"),metric("Market mentions",s.mentions,s.mentions_change,"var(--purple)"),metric("Active ads",s.active_ads,"Live now","var(--orange)",""),metric("Avg engagement",`${s.engagement_rate.toFixed(2)}%`,s.engagement_change,"var(--blue)"," pts vs previous period")].join(""); }
@@ -226,13 +260,20 @@ DASHBOARD_HTML = r"""
     function renderAds(){ const ads=filtered(state.data.ads,["competitor","creative_text","platform"]); $("#ads-list").innerHTML=ads.map(a=>`<article class="card ad-card"><div><div class="ad-top"><div class="post-meta"><strong>${escapeHTML(a.competitor)}</strong><span>·</span><span>${escapeHTML(titleCase(a.platform))}</span></div><span class="ad-status ${a.is_active?'':'paused'}">${a.is_active?'● ACTIVE':'PAUSED'}</span></div><p class="ad-copy">${escapeHTML(a.creative_text)}</p></div><div class="ad-footer"><span>Started ${a.start_date?relativeTime(a.start_date):'recently'}</span><span>${a.is_active?'Running now':'Completed'}</span></div></article>`).join("")||'<div class="card empty"><strong>No matching ads</strong>Try a different search or filter.</div>'; }
     function renderAll(){ renderKpis();renderChart();renderMix();renderCompetitors();renderBestTimes();renderPosts();renderSentiment();renderMentions();renderAds(); }
     function populateCompetitors(){ const select=$("#competitor-filter"); const current=select.value; select.innerHTML='<option value="">All competitors</option>'+state.data.competitors.map(c=>`<option value="${c.id}">${escapeHTML(c.name)}</option>`).join(""); select.value=current; }
-    async function loadData(showMessage=false){ const days=$("#date-filter").value; const competitor=$("#competitor-filter").value; const params=new URLSearchParams({days}); if(competitor)params.set("competitor_id",competitor); try{ const response=await fetch(`/api/dashboard?${params}`); if(!response.ok)throw new Error("Dashboard request failed"); state.data=await response.json(); populateCompetitors(); renderAll(); if(showMessage)showToast("Dashboard refreshed"); }catch(error){ console.error(error); showToast("Could not refresh dashboard"); } }
+    async function loadData(showMessage=false){ const days=$("#date-filter").value; const competitor=$("#competitor-filter").value; const params=new URLSearchParams({days}); if(competitor)params.set("competitor_id",competitor); try{ const response=await fetch(`/api/dashboard?${params}`,{headers:authHeaders()}); if(!response.ok)throw new Error("Dashboard request failed"); state.data=await response.json(); populateCompetitors(); renderAll(); if(showMessage)showToast("Dashboard refreshed"); }catch(error){ console.error(error); showToast("Could not refresh dashboard"); } }
     document.querySelectorAll(".nav-button").forEach(button=>button.addEventListener("click",()=>{ document.querySelectorAll(".nav-button,.view").forEach(el=>el.classList.remove("active")); button.classList.add("active"); state.view=button.dataset.view; document.getElementById(state.view).classList.add("active"); window.scrollTo({top:0,behavior:"smooth"}); }));
     $("#global-search").addEventListener("input",event=>{ state.query=event.target.value; if(state.data){renderPosts();renderMentions();renderAds();} });
     $("#date-filter").addEventListener("change",()=>loadData()); $("#competitor-filter").addEventListener("change",()=>loadData()); $("#refresh").addEventListener("click",()=>loadData(true));
-    const dialog=$("#brand-dialog"); $("#add-competitor").addEventListener("click",()=>dialog.showModal()); document.querySelectorAll(".close-button,.close-dialog").forEach(button=>button.addEventListener("click",()=>dialog.close()));
-    $("#brand-form").addEventListener("submit",async event=>{ event.preventDefault(); const form=new FormData(event.currentTarget); const payload=Object.fromEntries([...form.entries()].filter(([,value])=>value)); try{ const response=await fetch("/competitors",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)}); if(!response.ok){const data=await response.json();throw new Error(data.detail||"Could not add competitor");} dialog.close(); event.currentTarget.reset(); showToast(`${payload.name} added to Scout`); await loadData(); }catch(error){showToast(error.message);} });
-    loadData();
+    const dialog=$("#brand-dialog"), authDialog=$("#auth-dialog"), workspaceDialog=$("#workspace-dialog");
+    $("#add-competitor").addEventListener("click",()=>state.session?dialog.showModal():authDialog.showModal());
+    document.querySelectorAll(".close-button,.close-dialog").forEach(button=>button.addEventListener("click",()=>{ if(button.classList.contains("auth-close"))authDialog.close();else dialog.close(); }));
+    $("#auth-button").addEventListener("click",async()=>{ if(state.session){ try{await supabaseAuth("logout",{});}catch(error){} saveSession(null);state.account=null;updateAccountUI();showToast("Signed out");await loadData(); }else authDialog.showModal(); });
+    $("#auth-switch").addEventListener("click",()=>setAuthMode(state.authMode==="signin"?"signup":"signin"));
+    $("#auth-form").addEventListener("submit",async event=>{ event.preventDefault(); const email=$("#auth-email").value.trim(),password=$("#auth-password").value; try{ const path=state.authMode==="signup"?"signup":"token?grant_type=password"; const data=await supabaseAuth(path,{email,password}); if(!data.access_token){showToast("Check your email to confirm your account");return;} saveSession(data);authDialog.close();await loadAccount();await loadData();showToast(state.authMode==="signup"?"Account created":"Welcome back"); }catch(error){showToast(error.message);} });
+    $("#workspace-form").addEventListener("submit",async event=>{ event.preventDefault(); const form=new FormData(event.currentTarget); const payload=Object.fromEntries([...form.entries()].filter(([,value])=>value)); payload.competitor_names=$("#workspace-competitors").value.split(",").map(x=>x.trim()).filter(Boolean); try{ const response=await fetch("/api/workspace",{method:"POST",headers:{"Content-Type":"application/json",...authHeaders()},body:JSON.stringify(payload)}); const data=await response.json();if(!response.ok)throw new Error(data.detail||"Could not create workspace");workspaceDialog.close();await loadAccount();await loadData();showToast("Your real workspace is ready"); }catch(error){showToast(error.message);} });
+    $("#brand-form").addEventListener("submit",async event=>{ event.preventDefault(); const form=new FormData(event.currentTarget); const payload=Object.fromEntries([...form.entries()].filter(([,value])=>value)); try{ const response=await fetch("/competitors",{method:"POST",headers:{"Content-Type":"application/json",...authHeaders()},body:JSON.stringify(payload)}); if(!response.ok){const data=await response.json();throw new Error(data.detail||"Could not add competitor");} dialog.close(); event.currentTarget.reset(); showToast(`${payload.name} added to Scout`); await loadData(); }catch(error){showToast(error.message);} });
+    async function bootstrap(){ try{ const saved=localStorage.getItem("scout_session");if(saved)state.session=JSON.parse(saved);if(state.session)await loadAccount(); }catch(error){saveSession(null);showToast("Please sign in again");} updateAccountUI();await loadData(); }
+    bootstrap();
   </script>
 </body>
 </html>

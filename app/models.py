@@ -8,12 +8,29 @@ from sqlalchemy.orm import relationship
 from app.database import Base
 
 
+class Workspace(Base):
+    """One private Scout workspace owned by one Supabase user."""
+    __tablename__ = "workspaces"
+
+    id = Column(String(36), primary_key=True)
+    owner_id = Column(String(100), nullable=False, unique=True, index=True)
+    brand_name = Column(String(200), nullable=False)
+    website = Column(String(300), nullable=True)
+    handle_instagram = Column(String(100), nullable=True)
+    handle_twitter = Column(String(100), nullable=True)
+    is_sample_data = Column(Boolean, default=True, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+
+    competitors = relationship("Competitor", back_populates="workspace", cascade="all, delete-orphan")
+
+
 class Competitor(Base):
     """A brand/competitor being tracked."""
     __tablename__ = "competitors"
 
     id = Column(Integer, primary_key=True)
-    name = Column(String(200), nullable=False, unique=True)
+    workspace_id = Column(String(36), ForeignKey("workspaces.id"), nullable=True, index=True)
+    name = Column(String(200), nullable=False)
     website = Column(String(300), nullable=True)
 
     handle_twitter = Column(String(100), nullable=True)     # e.g. "nike"
@@ -24,6 +41,7 @@ class Competitor(Base):
     notes = Column(Text, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
 
+    workspace = relationship("Workspace", back_populates="competitors")
     posts = relationship("Post", back_populates="competitor", cascade="all, delete-orphan")
     mentions = relationship("Mention", back_populates="competitor", cascade="all, delete-orphan")
     ads = relationship("AdCreative", back_populates="competitor", cascade="all, delete-orphan")

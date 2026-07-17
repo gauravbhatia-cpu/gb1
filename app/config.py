@@ -8,9 +8,14 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
+    model_config = SettingsConfigDict(env_file=(".env", ".env.local"), extra="ignore")
 
     database_url: str = "sqlite:///./data/social_intel.db"
+    postgres_url: str | None = None
+
+    supabase_url: str | None = None
+    supabase_publishable_key: str | None = None
+    supabase_anon_key: str | None = None
 
     x_bearer_token: str | None = None
 
