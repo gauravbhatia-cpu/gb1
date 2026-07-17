@@ -28,7 +28,7 @@ uvicorn app.main:app --reload --port 8123
 
 ## Deploying the API to Vercel
 
-Vercel serves the FastAPI backend from `app.main:app`. The deployed root page
+Vercel auto-detects the FastAPI backend at `app/main.py`. The deployed root page
 links to the interactive API docs and a health check. The Streamlit dashboard
 is a separate long-running application and is still launched locally with the
 command above (or deployed to a Streamlit-compatible host).
