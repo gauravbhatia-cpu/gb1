@@ -1,0 +1,6 @@
+# The Vercel deployment is the FastAPI backend only. These local tools pull
+# in Streamlit, Plotly, pandas, and PyArrow and must not enter the function.
+dashboard/
+scripts/
+data/
+

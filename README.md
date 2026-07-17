@@ -13,7 +13,7 @@ Plug in real API keys when you're ready to track real competitors.
 
 ```bash
 python -m venv venv && source venv/bin/activate   # optional but recommended
-pip install -r dashboard/requirements.txt
+pip install -r dashboard/dependencies.local.txt
 cp .env.example .env
 python -m scripts.seed_demo_data      # populates data/social_intel.db with realistic fake data
 streamlit run dashboard/app.py        # opens the dashboard at localhost:8501

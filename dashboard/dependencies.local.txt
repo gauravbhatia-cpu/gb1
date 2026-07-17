@@ -1,6 +1,6 @@
 # Local development, Streamlit dashboard, scheduler, and optional Trends support.
-# Kept below dashboard/ so Vercel does not install these large UI dependencies
-# into the FastAPI serverless function.
+# This deliberately is not named requirements.txt so Vercel's Python runtime
+# does not discover it as a production dependency manifest.
 -r ../requirements.txt
 
 uvicorn[standard]==0.30.6
