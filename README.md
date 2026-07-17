@@ -5,9 +5,10 @@ analysis, posting-time patterns, engagement, competitor ad monitoring, and
 brand search interest — built to run today, with real (not mocked)
 connectors to the APIs that are actually available for this in 2026.
 
-**This has been tested and runs end-to-end** — the demo data seeder,
-FastAPI backend, and Streamlit dashboard all work with zero configuration.
-Plug in real API keys when you're ready to track real competitors.
+**This has been tested and runs end-to-end.** The FastAPI app automatically
+creates a realistic sample workspace when the database is empty and serves a
+responsive browser dashboard at `/`. Plug in real API keys when you're ready
+to track real competitors.
 
 ## Quick start (demo mode, no API keys needed)
 
@@ -15,23 +16,21 @@ Plug in real API keys when you're ready to track real competitors.
 python -m venv venv && source venv/bin/activate   # optional but recommended
 pip install -r dashboard/dependencies.local.txt
 cp .env.example .env
-python -m scripts.seed_demo_data      # populates data/social_intel.db with realistic fake data
-streamlit run dashboard/app.py        # opens the dashboard at localhost:8501
+uvicorn app.main:app --reload --port 8123
+# dashboard at http://localhost:8123; docs at http://localhost:8123/docs
 ```
 
-In a second terminal, the API (used for ingestion/sync jobs):
+The original Streamlit dashboard is still available as an optional local view:
 
 ```bash
-uvicorn app.main:app --reload --port 8123
-# docs at http://localhost:8123/docs
+streamlit run dashboard/app.py
 ```
 
 ## Deploying the API to Vercel
 
 Vercel auto-detects the FastAPI backend at `app/main.py`. The deployed root page
-links to the interactive API docs and a health check. The Streamlit dashboard
-is a separate long-running application and is still launched locally with the
-command above (or deployed to a Streamlit-compatible host).
+is the Scout product dashboard; `/docs` exposes the interactive API reference
+and `/health` provides a lightweight availability check.
 
 The default SQLite database is automatically placed in Vercel's writable
 `/tmp` directory so demo/API requests do not crash. That storage is ephemeral:
