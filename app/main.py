@@ -8,6 +8,7 @@ from typing import List
 
 from dateutil import parser as dateparser
 from fastapi import FastAPI, Depends, HTTPException
+from fastapi.responses import HTMLResponse
 from sqlalchemy.orm import Session
 
 from app.database import get_db, init_db
@@ -33,6 +34,51 @@ def _parse_dt(value):
         return dateparser.parse(value)
     except Exception:
         return None
+
+
+@app.get("/", response_class=HTMLResponse, include_in_schema=False)
+def home():
+    """Small deployment landing page; the full dashboard remains Streamlit."""
+    return """
+    <!doctype html>
+    <html lang="en">
+      <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <title>Competitor Social Intelligence</title>
+        <style>
+          :root { color-scheme: dark; font-family: Inter, ui-sans-serif, system-ui, sans-serif; }
+          body { margin: 0; min-height: 100vh; display: grid; place-items: center;
+                 background: radial-gradient(circle at top, #18324b, #07111d 55%); color: #e8f1fa; }
+          main { width: min(680px, calc(100% - 48px)); padding: 48px; border: 1px solid #29445e;
+                 border-radius: 24px; background: rgba(10, 24, 38, .86); box-shadow: 0 24px 80px #0008; }
+          .eyebrow { color: #66d9b7; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; }
+          h1 { margin: 12px 0; font-size: clamp(2.2rem, 7vw, 4.4rem); line-height: .98; }
+          p { color: #afc3d6; line-height: 1.65; font-size: 1.05rem; }
+          nav { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 28px; }
+          a { color: #06151f; background: #66d9b7; padding: 12px 18px; border-radius: 999px;
+              text-decoration: none; font-weight: 750; }
+          a.secondary { color: #dbe9f5; background: #1a354d; }
+        </style>
+      </head>
+      <body>
+        <main>
+          <div class="eyebrow">API online</div>
+          <h1>Competitor Social Intelligence</h1>
+          <p>The backend is running. Explore competitor, post, mention, ad, and analysis endpoints in the interactive API documentation.</p>
+          <nav>
+            <a href="/docs">Open API docs</a>
+            <a class="secondary" href="/health">Health check</a>
+          </nav>
+        </main>
+      </body>
+    </html>
+    """
+
+
+@app.get("/health", tags=["system"])
+def health():
+    return {"status": "ok", "service": "competitor-social-intel"}
 
 
 # --------------------------------------------------------------------------- #

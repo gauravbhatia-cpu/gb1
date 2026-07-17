@@ -13,7 +13,7 @@ Plug in real API keys when you're ready to track real competitors.
 
 ```bash
 python -m venv venv && source venv/bin/activate   # optional but recommended
-pip install -r requirements.txt
+pip install -r requirements-local.txt
 cp .env.example .env
 python -m scripts.seed_demo_data      # populates data/social_intel.db with realistic fake data
 streamlit run dashboard/app.py        # opens the dashboard at localhost:8501
@@ -25,6 +25,18 @@ In a second terminal, the API (used for ingestion/sync jobs):
 uvicorn app.main:app --reload --port 8123
 # docs at http://localhost:8123/docs
 ```
+
+## Deploying the API to Vercel
+
+Vercel serves the FastAPI backend from `app.main:app`. The deployed root page
+links to the interactive API docs and a health check. The Streamlit dashboard
+is a separate long-running application and is still launched locally with the
+command above (or deployed to a Streamlit-compatible host).
+
+The default SQLite database is automatically placed in Vercel's writable
+`/tmp` directory so demo/API requests do not crash. That storage is ephemeral:
+set `DATABASE_URL` in Vercel to a managed Postgres connection string before
+using the deployment for persistent data.
 
 ## Going live: what's real vs. what needs a decision
 
