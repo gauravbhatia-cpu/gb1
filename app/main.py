@@ -13,7 +13,7 @@ from fastapi import FastAPI, Depends, HTTPException
 from fastapi.responses import HTMLResponse
 from sqlalchemy.orm import Session
 
-from app.database import get_db, init_db, SessionLocal
+from app.database import database_url, get_db, init_db, SessionLocal
 from app import models, schemas
 from app.connectors import twitter_connector, meta_ads_connector, oembed_connector, news_connector
 from app.analysis import content_classifier, posting_time, engagement, ad_organic_matcher
@@ -55,7 +55,12 @@ def home():
 
 @app.get("/health", tags=["system"])
 def health():
-    return {"status": "ok", "service": "competitor-social-intel"}
+    auth_config = public_auth_config()
+    return {
+        "status": "ok", "service": "competitor-social-intel",
+        "auth_configured": bool(auth_config["supabaseUrl"] and auth_config["supabaseKey"]),
+        "persistent_database": database_url.startswith("postgresql"),
+    }
 
 
 def _workspace_for_user(user: AuthUser, db: Session) -> models.Workspace | None:
