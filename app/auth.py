@@ -17,10 +17,11 @@ class AuthUser:
 
 def _supabase_credentials() -> tuple[str, str]:
     url = (
-        os.getenv("SUPABASE_URL") or os.getenv("NEXT_PUBLIC_SUPABASE_URL") or
+        os.getenv("SCOUT_SUPABASE_URL") or os.getenv("SUPABASE_URL") or os.getenv("NEXT_PUBLIC_SUPABASE_URL") or
         settings.supabase_url or ""
     )
     key = (
+        os.getenv("SCOUT_SUPABASE_KEY") or
         os.getenv("SUPABASE_PUBLISHABLE_KEY") or
         os.getenv("NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY") or
         os.getenv("SUPABASE_ANON_KEY") or

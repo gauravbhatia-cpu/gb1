@@ -26,7 +26,9 @@ def _runtime_database_url(configured_url: str) -> str:
     return configured_url
 
 
-database_url = _runtime_database_url(settings.postgres_url or settings.database_url)
+database_url = _runtime_database_url(
+    os.getenv("SCOUT_DATABASE_URL") or settings.postgres_url or settings.database_url
+)
 
 # Ensure the parent directory exists for local relative SQLite databases.
 if database_url.startswith("sqlite"):
